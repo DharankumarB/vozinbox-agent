@@ -73,8 +73,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <Database className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>
                 <strong className="font-semibold">Local development mode.</strong> Supabase is not
-                configured, so data is stored on this machine only and Gmail cannot be connected.
-                Add your Supabase and Google credentials to run against real infrastructure.
+                configured, so data is stored on this machine.
+                {capabilities.gmail === 'configured'
+                  ? ' Google credentials are active for Gmail connection.'
+                  : ' Add Google credentials to connect real Gmail accounts.'}
+                {' '}Add your Supabase URL & Key to connect to cloud infrastructure.
               </span>
             </p>
           </div>

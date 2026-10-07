@@ -75,7 +75,7 @@ export interface DuplicateCheckInput {
   candidateDueDate: string | null;
   candidateDueTime: string | null;
   candidatePriority: EmailPriority;
-  sourceEmailId: string;
+  sourceEmailId: string | null;
   sourceThreadId: string | null;
   existingTasks: ExistingTaskCandidate[];
   /** Similarity above which we consider two actions the same (§14). */
@@ -94,7 +94,10 @@ export function checkDuplicate(input: DuplicateCheckInput): DuplicateDecision {
 
   // Layer 1: same source email → always a duplicate. Re-analysing one email
   // must not produce a second task, even if the first one was dismissed.
-  const sameEmail = input.existingTasks.find((task) => task.source_email_id === input.sourceEmailId);
+  const sameEmail =
+    input.sourceEmailId === null
+      ? undefined
+      : input.existingTasks.find((task) => task.source_email_id === input.sourceEmailId);
   if (sameEmail) {
     const terminal = TERMINAL_STATUSES.includes(sameEmail.status);
     return {

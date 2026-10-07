@@ -485,7 +485,7 @@ const TOOLS: Record<string, ToolSpec> = {
       // Duplicate prevention applies to assistant-created tasks too (§14).
       const candidates = await context.store.findDuplicateCandidates({
         userId: context.userId,
-        sourceEmailId: email?.id ?? 'none',
+        sourceEmailId: email?.id ?? null,
         sourceThreadId: email?.thread_id ?? null,
       });
       const decision = checkDuplicate({
@@ -493,7 +493,7 @@ const TOOLS: Record<string, ToolSpec> = {
         candidateDueDate: parsed.due_date ?? null,
         candidateDueTime: parsed.due_time ?? null,
         candidatePriority: parsed.priority as EmailPriority,
-        sourceEmailId: email?.id ?? 'none',
+        sourceEmailId: email?.id ?? null,
         sourceThreadId: email?.thread_id ?? null,
         existingTasks: candidates,
       });

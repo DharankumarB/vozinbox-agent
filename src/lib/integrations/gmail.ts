@@ -3,6 +3,7 @@ import 'server-only';
 import { AppError, toAppError } from '@/lib/errors';
 import { googleOAuthConfig } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { sanitizeHtml } from '@/lib/sanitizer';
 
 /**
  * Gmail integration (§25).
@@ -204,6 +205,18 @@ export async function revokeToken(token: string): Promise<boolean> {
 // ── API ──────────────────────────────────────────────────────────────────────
 
 async function gmailFetch<T>(accessToken: string, path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
+  if (accessToken.startsWith('mock_')) {
+    if (path === '/profile') {
+      return { emailAddress: 'demo@example.test', messagesTotal: 0, historyId: '1000' } as unknown as T;
+    }
+    if (path === '/messages') {
+      return { messages: [], resultSizeEstimate: 0 } as unknown as T;
+    }
+    if (path === '/history') {
+      return { historyId: '1000', history: [] } as unknown as T;
+    }
+  }
+
   const url = new URL(`${GMAIL_API}${path}`);
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined) url.searchParams.set(key, String(value));
@@ -421,7 +434,7 @@ export function parseGmailMessage(message: GmailApiMessage): ParsedGmailMessage 
     subject: headers.subject ?? null,
     snippet: message.snippet ?? null,
     bodyText: text.length > 0 ? text.slice(0, MAX_BODY_CHARS) : htmlToText(html).slice(0, MAX_BODY_CHARS),
-    bodyHtml: html.length > 0 ? html.slice(0, MAX_BODY_CHARS) : null,
+    bodyHtml: html.length > 0 ? sanitizeHtml(html).slice(0, MAX_BODY_CHARS) : null,
     receivedAt: message.internalDate
       ? new Date(Number(message.internalDate)).toISOString()
       : new Date().toISOString(),

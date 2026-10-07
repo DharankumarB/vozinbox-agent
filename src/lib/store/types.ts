@@ -309,7 +309,7 @@ export interface AgentHealth {
 
 export interface DuplicateCandidateQuery {
   userId: string;
-  sourceEmailId: string;
+  sourceEmailId: string | null;
   sourceThreadId: string | null;
   excludeTaskId?: string | null;
 }

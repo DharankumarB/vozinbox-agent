@@ -40,7 +40,12 @@ as $$
       ea as analysis,
       t as task,
       count(*) over () as total_count,
-      (ea.detected_deadline ->> 'date') as deadline_date
+      (ea.detected_deadline ->>'date') as deadline_date,
+      e.is_read as _is_read,
+      coalesce(ea.action_required, false) as _action_required,
+      coalesce(ea.priority::text, 'NONE') as _priority,
+      e.received_at as _received_at,
+      e.id as _id
     from public.emails e
     left join public.email_analysis ea on ea.email_id = e.id
     left join public.tasks t
@@ -81,17 +86,16 @@ as $$
   select b.email, b.analysis, b.task, b.total_count
   from base b
   order by
-    case when p_sort = 'UNREAD_FIRST' then (b.email.is_read)::int end asc nulls last,
-    case when p_sort = 'ACTION_REQUIRED_FIRST'
-         then (coalesce(b.analysis.action_required, false))::int end desc nulls last,
+    case when p_sort = 'UNREAD_FIRST' then b._is_read::int end asc nulls last,
+    case when p_sort = 'ACTION_REQUIRED_FIRST' then b._action_required::int end desc nulls last,
     case when p_sort in ('HIGHEST_PRIORITY')
-         then case coalesce(b.analysis.priority, 'NONE')
+         then case b._priority
                 when 'CRITICAL' then 5 when 'HIGH' then 4 when 'MEDIUM' then 3
                 when 'LOW' then 2 else 1 end end desc nulls last,
     case when p_sort = 'DEADLINE_SOONEST' then b.deadline_date end asc nulls last,
-    case when p_sort = 'OLDEST' then b.email.received_at end asc nulls last,
-    b.email.received_at desc,
-    b.email.id desc
+    case when p_sort = 'OLDEST' then b._received_at end asc nulls last,
+    b._received_at desc,
+    b._id desc
   limit greatest(1, least(coalesce(p_limit, 25), 100))
   offset greatest(0, coalesce(p_offset, 0));
 $$;
@@ -126,7 +130,12 @@ as $$
   with base as (
     select t as task,
            e as source_email,
-           count(*) over () as total_count
+           count(*) over () as total_count,
+           t.due_date as _due_date,
+           t.due_time as _due_time,
+           t.created_at as _created_at,
+           coalesce(t.priority::text, 'NONE') as _priority,
+           t.status::text as _status
     from public.tasks t
     left join public.emails e on e.id = t.source_email_id
     where t.user_id = p_user_id
@@ -148,18 +157,17 @@ as $$
   select b.task, b.source_email, b.total_count
   from base b
   order by
-    case when p_sort = 'DUE_SOONEST' then b.task.due_date end asc nulls last,
-    case when p_sort = 'DUE_SOONEST' and b.task.due_time is not null
-         then b.task.due_time end asc nulls last,
-    case when p_sort = 'NEWEST' then b.task.created_at end desc nulls last,
+    case when p_sort = 'DUE_SOONEST' then b._due_date end asc nulls last,
+    case when p_sort = 'DUE_SOONEST' then b._due_time end asc nulls last,
+    case when p_sort = 'NEWEST' then b._created_at end desc nulls last,
     case when p_sort = 'PRIORITY'
-         then case b.task.priority
+         then case b._priority
                 when 'CRITICAL' then 5 when 'HIGH' then 4 when 'MEDIUM' then 3
                 when 'LOW' then 2 else 1 end end desc nulls last,
     case when p_sort = 'STATUS'
-         then case b.task.status when 'SUGGESTED' then 1 when 'TODO' then 2 when 'IN_PROGRESS' then 3 else 4 end
+         then case b._status when 'SUGGESTED' then 1 when 'TODO' then 2 when 'IN_PROGRESS' then 3 else 4 end
          end asc nulls last,
-    b.task.created_at desc
+    b._created_at desc
   limit greatest(1, least(coalesce(p_limit, 50), 200))
   offset greatest(0, coalesce(p_offset, 0));
 $$;

@@ -623,7 +623,11 @@ export class SupabaseStore implements Store {
   > {
     const filters: string[] = [];
     if (query.sourceThreadId) filters.push(`source_thread_id.eq.${query.sourceThreadId}`);
-    filters.push(`source_email_id.eq.${query.sourceEmailId}`);
+    filters.push(
+      query.sourceEmailId
+        ? `source_email_id.eq.${query.sourceEmailId}`
+        : 'source_email_id.is.null',
+    );
 
     let builder = this.client
       .from('tasks')

@@ -58,7 +58,7 @@ export const POST = withUser(
     // warned rather than silently getting a second identical task.
     const candidates = await store.findDuplicateCandidates({
       userId: auth.id,
-      sourceEmailId: input.sourceEmailId ?? 'none',
+      sourceEmailId: input.sourceEmailId ?? null,
       sourceThreadId: threadId,
     });
     const decision = checkDuplicate({
@@ -66,7 +66,7 @@ export const POST = withUser(
       candidateDueDate: input.dueDate ?? null,
       candidateDueTime: input.dueTime ?? null,
       candidatePriority: input.priority,
-      sourceEmailId: input.sourceEmailId ?? 'none',
+      sourceEmailId: input.sourceEmailId ?? null,
       sourceThreadId: threadId,
       existingTasks: candidates,
     });

@@ -42,7 +42,30 @@ export async function GET(request: Request): Promise<NextResponse> {
     const userId = await verifyOAuthState(state, 'gmail');
     const store = await getStore();
     const { account } = await connectGmail({ store, userId, code });
-    return redirectWith('connected', `${account.email_address} connected.`);
+
+    // Trigger initial inbox sync for the newly connected Gmail account (§32)
+    try {
+      const { syncUserAccounts } = await import('@/lib/services/agent');
+      const profile = await store.getProfile(userId);
+      await syncUserAccounts({
+        store,
+        userId,
+        timezone: profile?.timezone ?? 'UTC',
+        accountId: account.id,
+        limit: 40,
+      });
+    } catch (syncError) {
+      logger.warn('integration.initial_sync_warning', {
+        userId,
+        accountId: account.id,
+        error: toAppError(syncError).message,
+      });
+    }
+
+    const target = new URL('/inbox', origin);
+    target.searchParams.set('status', 'connected');
+    target.searchParams.set('message', 'Gmail connected successfully.');
+    return NextResponse.redirect(target);
   } catch (err) {
     const appError = toAppError(err, 'OAUTH_FAILED');
     logger.error('integration.gmail_callback_failed', { code: appError.code, detail: appError.message });

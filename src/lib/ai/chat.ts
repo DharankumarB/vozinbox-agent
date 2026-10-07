@@ -201,5 +201,6 @@ export function chatFailureMessage(error: unknown): string {
   if (appError.code === 'AI_INVALID_OUTPUT') {
     return "I couldn't produce a reliable answer that time. Please try again.";
   }
+  if (appError.code === 'AI_FAILED') return appError.userMessage;
   return 'Unable to reach the assistant right now. Please try again.';
 }

@@ -31,8 +31,10 @@ export interface ConnectResult {
   created: boolean;
 }
 
+import { isLocalModeEnabled } from '@/lib/env';
+
 export function isGmailReady(): boolean {
-  return isGmailConfigured() && isEncryptionConfigured();
+  return (isGmailConfigured() || isLocalModeEnabled()) && isEncryptionConfigured();
 }
 
 export async function connectGmail(input: {

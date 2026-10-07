@@ -7,9 +7,9 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <main
       id="main"
-      className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col items-center justify-center gap-10 px-4 py-10 lg:flex-row lg:gap-16"
+      className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col items-center justify-center gap-6 px-4 py-8 sm:py-10 lg:flex-row lg:items-center lg:gap-16"
     >
-      <section className="w-full max-w-md lg:flex-1">
+      <section className="hidden w-full max-w-md lg:block lg:flex-1">
         <Logo href="/login" className="mb-8" />
         <h1 className="text-3xl font-semibold leading-tight text-mist-50 sm:text-4xl">
           Turn your inbox into

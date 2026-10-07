@@ -164,6 +164,23 @@ describe('task duplicate prevention', () => {
     });
     expect(candidates.some((candidate) => candidate.id === task.id)).toBe(true);
   });
+
+  it('returns standalone tasks as duplicate candidates without a source email', async () => {
+    const task = await store.createTask({
+      ...taskInput('unused'),
+      source_email_id: null,
+      source_thread_id: null,
+      dedupe_key: null,
+    });
+
+    const candidates = await store.findDuplicateCandidates({
+      userId: USER_A,
+      sourceEmailId: null,
+      sourceThreadId: null,
+    });
+
+    expect(candidates.some((candidate) => candidate.id === task.id)).toBe(true);
+  });
 });
 
 describe('notifications', () => {

@@ -874,9 +874,12 @@ export class LocalStore implements Store {
       .filter((task) => task.id !== query.excludeTaskId)
       .filter(
         (task) =>
-          task.source_email_id === query.sourceEmailId ||
+          (query.sourceEmailId === null
+            ? task.source_email_id === null
+            : task.source_email_id === query.sourceEmailId) ||
           (query.sourceThreadId !== null && task.source_thread_id === query.sourceThreadId) ||
-          (task.source_email_id !== null &&
+          (query.sourceEmailId !== null &&
+            task.source_email_id !== null &&
             task.source_email_id !== query.sourceEmailId &&
             sharesTitleFamily(db, task, query.sourceEmailId)),
       )
