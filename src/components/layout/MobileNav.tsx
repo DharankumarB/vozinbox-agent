@@ -27,7 +27,7 @@ export function MobileNav({ unreadNotifications }: { unreadNotifications: number
           <div className="absolute inset-0 bg-ink-950/80 backdrop-blur-sm" onClick={() => setSheetOpen(false)} />
           <div className="absolute inset-x-0 bottom-0 max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-white/[0.08] bg-ink-850 p-5 animate-fade-up">
             <div className="mb-4 flex items-center justify-between">
-              <Logo />
+              <Logo compact />
               <button
                 type="button"
                 onClick={() => setSheetOpen(false)}

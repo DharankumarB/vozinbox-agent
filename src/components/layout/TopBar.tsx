@@ -66,7 +66,7 @@ export function TopBar({
   return (
     <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-ink-950/85 backdrop-blur-md">
       <div className="flex items-center gap-3 px-4 py-3 lg:px-6">
-        <Logo className="lg:hidden" />
+        <Logo compact className="lg:hidden" />
 
         <div className="hidden min-w-0 flex-1 items-center gap-3 lg:flex">
           <Link
