@@ -86,6 +86,34 @@ Data lives in `.vozinbox-dev/data.json` (git-ignored). Delete the folder to rese
 
 ## 4. Connecting real infrastructure
 
+### 4.0 Deploying on Vercel
+
+The app uses Next.js defaults supported by Vercel; no custom build command or output directory is
+needed. Import `DharankumarB/vozinbox-agent` in Vercel (or keep the existing Git integration) and
+deploy the `main` branch. Pushes to `main` create production deployments automatically.
+
+Before using the deployed app, create a Supabase project, apply every migration in
+`supabase/migrations/` in filename order, and add these environment variables in **Project Settings →
+Environment Variables** for Production (and Preview if previews should use a separate database):
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `NEXT_PUBLIC_APP_URL` | Yes | Canonical production origin, e.g. `https://your-domain.vercel.app`; used for OAuth redirect URLs |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Recommended | Server-side background jobs and privileged Supabase operations; keep server-only |
+
+For Gmail, also configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and a unique 32-byte
+`TOKEN_ENCRYPTION_KEY`. Add
+`https://your-domain.vercel.app/api/integrations/gmail/callback` as an authorized redirect URI in
+Google Cloud OAuth settings. Do not use a Preview URL as the OAuth redirect URI unless that exact
+URL is configured with Google.
+
+`AI_API_KEY` is optional; deterministic email analysis remains available without it. `CRON_SECRET` is
+optional unless a scheduler will call `/api/cron/sync`. Never add secret values to the Git repository:
+set them in Vercel's Environment Variables UI and redeploy after changing them. The local `.vercel/`
+project link is intentionally git-ignored.
+
 ### 4.1 Supabase (database, auth, realtime)
 
 1. Create a project at <https://supabase.com>.

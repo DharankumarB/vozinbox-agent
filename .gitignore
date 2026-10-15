@@ -39,6 +39,7 @@ coverage/
 .vscode/*
 !.vscode/extensions.json
 .idea/
+.vercel/
 .DS_Store
 Thumbs.db
 *.swp
