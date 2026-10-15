@@ -114,6 +114,10 @@ optional unless a scheduler will call `/api/cron/sync`. Never add secret values 
 set them in Vercel's Environment Variables UI and redeploy after changing them. The local `.vercel/`
 project link is intentionally git-ignored.
 
+Keep `TOKEN_ENCRYPTION_KEY` stable after connecting mailboxes. Rotating or replacing it makes existing
+encrypted Gmail credentials unreadable; use **Reconnect** on the affected mailbox in Integrations to
+obtain and store fresh credentials. Inbox data is not deleted by reconnecting.
+
 ### 4.1 Supabase (database, auth, realtime)
 
 1. Create a project at <https://supabase.com>.

@@ -249,6 +249,14 @@ export function IntegrationsView({
                       <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                       Sync now
                     </Button>
+                    {!connected || needsAttention ? (
+                      <ConnectGmailButton
+                        configured={gmailReady}
+                        accountId={account.id}
+                        label="Reconnect"
+                        className="px-3 py-1.5 text-[13px]"
+                      />
+                    ) : null}
                     <Button
                       variant="danger"
                       size="sm"
