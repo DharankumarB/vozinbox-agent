@@ -6,15 +6,55 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { AlertCircle } from 'lucide-react';
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 type Mode = 'login' | 'signup' | 'reset';
 
-export function AuthForm({ mode, nextPath = '/dashboard' }: { mode: Mode; nextPath?: string }) {
+export function AuthForm({
+  mode,
+  nextPath = '/dashboard',
+  googleError = false,
+}: {
+  mode: Mode;
+  nextPath?: string;
+  googleError?: boolean;
+}) {
   const router = useRouter();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [error, setError] = useState<string | null>(
+    googleError ? 'Google sign-in could not be completed. Please try again.' : null,
+  );
   const [notice, setNotice] = useState<string | null>(null);
+
+  const onGoogleSignIn = async () => {
+    setError(null);
+    setOauthLoading(true);
+
+    try {
+      const supabase = createClient();
+      if (!supabase) {
+        setError('Google sign-in is unavailable because authentication is not configured.');
+        return;
+      }
+
+      const redirectTo = new URL('/auth/callback', window.location.origin);
+      redirectTo.searchParams.set('next', nextPath);
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: redirectTo.toString() },
+      });
+
+      if (oauthError) {
+        setError('Unable to start Google sign-in. Please try again.');
+      }
+    } catch {
+      setError('Unable to start Google sign-in. Please try again.');
+    } finally {
+      setOauthLoading(false);
+    }
+  };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -177,10 +217,36 @@ export function AuthForm({ mode, nextPath = '/dashboard' }: { mode: Mode; nextPa
           </p>
         ) : null}
 
-        <Button type="submit" variant="primary" loading={loading} className="w-full">
+        <Button type="submit" variant="primary" loading={loading} disabled={oauthLoading} className="w-full">
           {titles[mode].cta}
         </Button>
       </form>
+
+      {mode !== 'reset' && isSupabaseConfigured() ? (
+        <>
+          <div className="my-4 flex items-center gap-3 text-[11px] text-mist-500" aria-hidden="true">
+            <span className="h-px flex-1 bg-white/10" />
+            <span>or</span>
+            <span className="h-px flex-1 bg-white/10" />
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            loading={oauthLoading}
+            disabled={loading}
+            onClick={onGoogleSignIn}
+            className="w-full"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z" />
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.74 7.18l7.72 5.99c4.51-4.16 7.06-10.28 7.06-17.64Z" />
+              <path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.75-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.88.93 7.57 2.56 10.78l7.97-6.19Z" />
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.81l-7.72-5.99c-2.14 1.44-4.89 2.3-8.19 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z" />
+            </svg>
+            Continue with Google
+          </Button>
+        </>
+      ) : null}
 
       <p className="mt-5 text-center text-xs text-mist-400">
         {mode === 'login' ? (

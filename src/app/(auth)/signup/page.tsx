@@ -5,8 +5,13 @@ import { getCurrentUser } from '@/lib/auth';
 
 export const metadata: Metadata = { title: 'Create account' };
 
-export default async function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ oauthError?: string }>;
+}) {
   const user = await getCurrentUser();
   if (user) redirect('/dashboard');
-  return <AuthForm mode="signup" />;
+  const params = await searchParams;
+  return <AuthForm mode="signup" googleError={params.oauthError === 'google'} />;
 }

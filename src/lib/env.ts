@@ -11,13 +11,31 @@
 const isServer = typeof window === 'undefined';
 
 function read(name: string): string | undefined {
-  const raw = process.env[name];
+  return clean(process.env[name]);
+}
+
+function clean(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
   const trimmed = raw.trim();
   if (trimmed === '' || trimmed.toLowerCase() === 'placeholder' || trimmed.startsWith('your-')) {
     return undefined;
   }
   return trimmed;
+}
+
+function readPublic(name: 'NEXT_PUBLIC_APP_URL' | 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SUPABASE_ANON_KEY' | 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') {
+  if (isServer) return read(name);
+
+  switch (name) {
+    case 'NEXT_PUBLIC_APP_URL':
+      return clean(process.env.NEXT_PUBLIC_APP_URL);
+    case 'NEXT_PUBLIC_SUPABASE_URL':
+      return clean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+    case 'NEXT_PUBLIC_SUPABASE_ANON_KEY':
+      return clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+    case 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY':
+      return clean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+  }
 }
 
 export interface PublicEnv {
@@ -33,10 +51,12 @@ let cachedPublic: PublicEnv | null = null;
 export function publicEnv(): PublicEnv {
   if (cachedPublic) return cachedPublic;
 
-  const appUrl = read('NEXT_PUBLIC_APP_URL') ?? 'http://localhost:3000';
-  const supabaseUrl = read('NEXT_PUBLIC_SUPABASE_URL') ?? null;
+  const appUrl = readPublic('NEXT_PUBLIC_APP_URL') ?? 'http://localhost:3000';
+  const supabaseUrl = readPublic('NEXT_PUBLIC_SUPABASE_URL') ?? null;
   const supabaseAnonKey =
-    read('NEXT_PUBLIC_SUPABASE_ANON_KEY') ?? read('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ?? null;
+    readPublic('NEXT_PUBLIC_SUPABASE_ANON_KEY') ??
+    readPublic('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ??
+    null;
 
   cachedPublic = {
     appUrl: appUrl.replace(/\/$/, ''),

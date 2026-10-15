@@ -134,7 +134,13 @@ project link is intentionally git-ignored.
    functions, triggers, realtime publications and the query RPCs.
 
 5. **Authentication → URL configuration** → add `http://localhost:3000/**` as a redirect URL, and set
-   the Site URL to your deployment origin.
+   the Site URL to your deployment origin. For Google sign-in, also add
+   `https://YOUR-DOMAIN/auth/callback` to the allowed redirect URLs.
+6. To enable **Continue with Google**, open **Authentication → Sign In / Providers → Google** in
+   Supabase and enter your Google OAuth client ID and secret. In Google Cloud, add
+   `https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback` as an authorized redirect URI for that
+   OAuth client. The app callback (`/auth/callback`) is the Supabase allowed redirect; the Google
+   Cloud callback is Supabase's `/auth/v1/callback`.
 
 Row-level security is enforced on every table; the policies are in `0004_rls.sql`. The service-role key
 is only used by server-side background jobs, and every query it makes is still scoped by `user_id`.
