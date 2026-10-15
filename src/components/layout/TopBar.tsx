@@ -3,12 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { LogOut, RefreshCw, Search } from 'lucide-react';
+import { LogOut, MailPlus, RefreshCw, Search } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { NotificationBell } from './NotificationBell';
 import { Logo } from './Logo';
 import { relativeTime } from '@/lib/utils';
+import { requestEmailCompose } from '@/components/inbox/EmailComposerHost';
 
 export function TopBar({
   email,
@@ -91,6 +92,10 @@ export function TopBar({
           >
             <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="hidden sm:inline">Sync now</span>
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => requestEmailCompose()} aria-label="Compose email">
+            <MailPlus className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Compose</span>
           </Button>
           <NotificationBell unreadCount={unreadNotifications} />
           <Button variant="ghost" size="sm" onClick={handleLogout} aria-label={`Sign out ${email ?? ''}`}>

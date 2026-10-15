@@ -381,7 +381,7 @@ export function SettingsView({
             <p className="text-sm text-mist-100">Gmail — read-only</p>
             <p className="mt-0.5 text-[11px] text-mist-500">
               {gmailConnected
-                ? 'A mailbox is connected. VozInbox never sends, deletes or modifies email.'
+                ? 'A mailbox is connected. Only your explicit read/unread actions update Gmail; VozInbox never sends, deletes, archives or forwards mail.'
                 : 'No mailbox connected yet.'}
             </p>
           </div>

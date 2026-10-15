@@ -114,6 +114,16 @@ export function IntegrationsView({
   };
 
   const anyConnected = accounts.some((entry) => entry.connected);
+  const needsReadStateScope = accounts.some(
+    ({ account }) =>
+      !account.scopes.includes('https://www.googleapis.com/auth/gmail.modify') ||
+      !account.scopes.includes('https://www.googleapis.com/auth/gmail.send'),
+  );
+  const accountNeedingPermissions = accounts.find(
+    ({ account }) =>
+      !account.scopes.includes('https://www.googleapis.com/auth/gmail.modify') ||
+      !account.scopes.includes('https://www.googleapis.com/auth/gmail.send'),
+  )?.account;
 
   return (
     <div className="space-y-5">
@@ -126,14 +136,23 @@ export function IntegrationsView({
             <div>
               <h2 className="text-sm font-semibold text-mist-50">Gmail</h2>
               <p className="mt-0.5 max-w-xl text-xs leading-relaxed text-mist-400">
-                Read-only access via Google OAuth (<code className="font-mono text-[10px]">gmail.readonly</code>).
-                VozInbox never sends, deletes or modifies your email, and never asks for your password.
+                Mail is read for analysis, and delivery happens only when you explicitly send from the composer (
+                <code className="font-mono text-[10px]">gmail.send</code>). Read-state updates use{' '}
+                <code className="font-mono text-[10px]">gmail.modify</code>. VozInbox never sends without your action,
+                deletes messages, or asks for your password.
               </p>
             </div>
           </div>
           <ConnectGmailButton
             configured={gmailReady}
-            label={accounts.length > 0 ? 'Connect another mailbox' : 'Connect Gmail'}
+            accountId={accountNeedingPermissions?.id}
+            label={
+              needsReadStateScope
+                ? 'Update Gmail permissions'
+                : accounts.length > 0
+                  ? 'Connect another mailbox'
+                  : 'Connect Gmail'
+            }
           />
         </div>
 

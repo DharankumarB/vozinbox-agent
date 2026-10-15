@@ -12,20 +12,24 @@ import {
 import type { EmailAnalysis } from '@/lib/types/database';
 import { CategoryBadge, DeadlineBadge, PriorityBadge, ReviewBadge } from '@/components/ui/Badge';
 import { cn, percent, shortDate, timeLabel } from '@/lib/utils';
+import { CachedEmailSummary } from './CachedEmailSummary';
 
 /**
  * AI understanding panel (§8).
  * Presents exactly what the analysis stored — including confidence and the
  * evidence sentence behind the deadline. Uncertainty is shown, never hidden.
  */
-export function AIInsightPanel({ analysis, className }: { analysis: EmailAnalysis | null; className?: string }) {
+export function AIInsightPanel({ analysis, emailId, className }: { analysis: EmailAnalysis | null; emailId: string; className?: string }) {
   if (!analysis) {
     return (
-      <aside className={cn('panel p-5', className)} aria-label="AI understanding">
+      <aside className={cn('space-y-4', className)} aria-label="AI understanding">
+        <CachedEmailSummary emailId={emailId} />
+        <section className="panel p-5">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-mist-500">AI understanding</h2>
         <p className="mt-3 text-sm text-mist-400">
           This message has not been analysed yet. Use “Analyse now” to run the agent pipeline.
         </p>
+        </section>
       </aside>
     );
   }
@@ -35,6 +39,7 @@ export function AIInsightPanel({ analysis, className }: { analysis: EmailAnalysi
 
   return (
     <aside className={cn('space-y-4', className)} aria-label="AI understanding">
+      <CachedEmailSummary emailId={emailId} />
       <section className="panel p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-mist-500">

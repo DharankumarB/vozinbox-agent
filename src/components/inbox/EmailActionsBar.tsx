@@ -25,6 +25,7 @@ export function EmailActionsBar({ emailId, isRead }: { emailId: string; isRead: 
         toast.push(payload.error?.message ?? 'Unable to update this email.', 'error');
         return;
       }
+      toast.push(isRead ? 'Email marked unread.' : 'Email marked read.', 'success');
       router.refresh();
     } catch {
       toast.push('Unable to complete this action. Please try again.', 'error');

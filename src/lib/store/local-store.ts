@@ -9,6 +9,7 @@ import type {
   AgentRun,
   AppNotification,
   Email,
+  EmailAISummary,
   EmailAccount,
   EmailActionRow,
   EmailAnalysis,
@@ -70,6 +71,7 @@ interface LocalDatabase {
   threads: EmailThread[];
   emails: Email[];
   analyses: EmailAnalysis[];
+  aiSummaries: EmailAISummary[];
   history: Array<HistoryInput & { id: string; created_at: string }>;
   actions: EmailActionRow[];
   tasks: Task[];
@@ -100,6 +102,7 @@ const EMPTY_DB: LocalDatabase = {
   threads: [],
   emails: [],
   analyses: [],
+  aiSummaries: [],
   history: [],
   actions: [],
   tasks: [],
@@ -511,6 +514,35 @@ export class LocalStore implements Store {
     if (!email) return;
     Object.assign(email, values, { updated_at: now() });
     await persist();
+  }
+
+  async getEmailAISummary(userId: string, emailId: string): Promise<EmailAISummary | null> {
+    const db = await load();
+    return db.aiSummaries.find((summary) => summary.user_id === userId && summary.email_id === emailId) ?? null;
+  }
+
+  async upsertEmailAISummary(
+    input: Omit<EmailAISummary, 'id' | 'created_at' | 'updated_at'>,
+  ): Promise<EmailAISummary> {
+    const db = await load();
+    const existing = db.aiSummaries.find(
+      (summary) => summary.user_id === input.user_id && summary.email_id === input.email_id,
+    );
+    const timestamp = now();
+    if (existing) {
+      Object.assign(existing, input, { updated_at: timestamp });
+      await persist();
+      return existing;
+    }
+    const summary: EmailAISummary = {
+      ...input,
+      id: randomUUID(),
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    db.aiSummaries.push(summary);
+    await persist();
+    return summary;
   }
 
   async listInbox(query: InboxQuery): Promise<InboxPage> {

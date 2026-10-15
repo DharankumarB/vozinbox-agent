@@ -44,7 +44,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         <Link href="/login" className="underline-offset-4 hover:underline">
           VozInbox Agent
         </Link>{' '}
-        · read-only Gmail access · your data stays yours
+        · Gmail read-state sync · your data stays yours
       </p>
     </main>
   );

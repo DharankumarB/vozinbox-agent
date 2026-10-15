@@ -106,10 +106,14 @@ export async function createChatCompletion(options: CompletionOptions): Promise<
   const config = requireConfig();
   const modeKey = `${config.baseUrl}|${options.model ?? config.model}`;
   const requested = options.responseFormat
-    ? initialMode(config)
+    ? options.responseFormat.type === 'json_object'
+      ? 'json_object'
+      : initialMode(config)
     : 'prompt';
   const mode: WireMode = options.responseFormat
-    ? (workingMode.get(modeKey) ?? requested)
+    ? options.responseFormat.type === 'json_object'
+      ? 'json_object'
+      : (workingMode.get(modeKey) ?? requested)
     : 'prompt';
 
   try {

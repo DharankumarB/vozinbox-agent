@@ -7,6 +7,7 @@ import type {
   AgentRun,
   AppNotification,
   Email,
+  EmailAISummary,
   EmailAccount,
   EmailActionRow,
   EmailAnalysis,
@@ -369,6 +370,31 @@ export class SupabaseStore implements Store {
 
   async updateEmail(userId: string, emailId: string, values: Partial<Email>): Promise<void> {
     await this.run('updateEmail', this.client.from('emails').update(values).eq('user_id', userId).eq('id', emailId));
+  }
+
+  async getEmailAISummary(userId: string, emailId: string): Promise<EmailAISummary | null> {
+    return this.maybeRun<EmailAISummary>(
+      'getEmailAISummary',
+      this.client
+        .from('email_ai_summaries')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('email_id', emailId)
+        .maybeSingle(),
+    );
+  }
+
+  async upsertEmailAISummary(
+    input: Omit<EmailAISummary, 'id' | 'created_at' | 'updated_at'>,
+  ): Promise<EmailAISummary> {
+    return this.run<EmailAISummary>(
+      'upsertEmailAISummary',
+      this.client
+        .from('email_ai_summaries')
+        .upsert(input, { onConflict: 'email_id' })
+        .select('*')
+        .single(),
+    );
   }
 
   async listInbox(query: InboxQuery): Promise<InboxPage> {

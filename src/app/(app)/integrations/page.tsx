@@ -34,7 +34,7 @@ export default async function IntegrationsPage({
     <div className="mx-auto w-full max-w-3xl space-y-5">
       <PageHeader
         title="Integrations"
-        description="Connect the mailbox VozInbox should read. Access is read-only and revocable at any time."
+        description="Connect the mailbox VozInbox should read. Message content stays read-only; you can revoke access at any time."
       />
 
       {params.status === 'connected' ? (

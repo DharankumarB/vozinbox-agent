@@ -4,6 +4,7 @@ import { getStore, usingLocalStore } from '@/lib/store';
 import { capabilityReport } from '@/lib/env';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
+import { EmailComposerHost } from '@/components/inbox/EmailComposerHost';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { RealtimeRefresher } from '@/components/layout/RealtimeRefresher';
 import type { AgentState } from '@/components/agent/AgentStatusPill';
@@ -25,7 +26,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     store.listAgentRuns(auth.id, 3),
   ]);
 
-  const connected = accounts.filter((account) => account.status === 'CONNECTED');
+  const connected = accounts.filter((account) => account.status === 'CONNECTED' && account.provider === 'gmail');
   const latestRun = runs[0] ?? null;
   const lastSyncAt = connected
     .map((account) => account.last_sync_at)
@@ -50,6 +51,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh">
       <RealtimeRefresher userId={auth.id} />
+      <EmailComposerHost accounts={connected.map(({ id, email_address, scopes }) => ({ id, email_address, scopes }))} />
 
       <Sidebar
         unread={counters.unread}

@@ -135,6 +135,26 @@ export interface Email {
   updated_at: string;
 }
 
+export interface EmailAISummary {
+  id: string;
+  user_id: string;
+  email_id: string;
+  content_hash: string;
+  summary: {
+    purpose: string;
+    summary: string;
+    key_points: string[];
+    requested_actions: string[];
+    deadline: string | null;
+    question_requires_response: boolean;
+    reply_appropriate: boolean;
+  };
+  model_name: string;
+  generated_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface EmailAnalysis {
   id: string;
   user_id: string;

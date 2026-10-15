@@ -17,6 +17,7 @@ import type {
   AgentRun,
   AppNotification,
   Email,
+  EmailAISummary,
   EmailAccount,
   EmailActionRow,
   EmailAnalysis,
@@ -356,6 +357,8 @@ export interface Store {
   upsertEmail(input: NewEmailInput): Promise<Email>;
   getEmail(userId: string, emailId: string): Promise<Email | null>;
   updateEmail(userId: string, emailId: string, values: Partial<Email>): Promise<void>;
+  getEmailAISummary(userId: string, emailId: string): Promise<EmailAISummary | null>;
+  upsertEmailAISummary(input: Omit<EmailAISummary, 'id' | 'created_at' | 'updated_at'>): Promise<EmailAISummary>;
   listInbox(query: InboxQuery): Promise<InboxPage>;
   countEmails(userId: string): Promise<number>;
   getUpcomingDeadlines(userId: string, days: number, limit: number): Promise<DeadlineItem[]>;

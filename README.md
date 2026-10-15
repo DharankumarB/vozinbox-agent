@@ -7,7 +7,7 @@ deadlines inside it, and turns them into suggested tasks and notifications — w
 evidence from the source text, and a human approval step before anything becomes real work.
 
 It is a complete Next.js 15 application: authentication, a Supabase schema with row-level security, a
-read-only Gmail integration, an AI analysis pipeline with a deterministic fallback, a tool-calling chat
+Gmail integration, an AI analysis pipeline with a deterministic fallback, a tool-calling chat
 assistant, and a dark, responsive product UI.
 
 ---
@@ -24,17 +24,20 @@ Nothing in this app pretends to work when it is not configured. The UI reads a l
 | Email analysis | **Deterministic rules engine** — classification, action detection, deadline extraction, priority scoring, thread change detection | Same pipeline, with an AI provider refining the output through a validated JSON contract |
 | Deadline / priority / summary | Works (rules engine) | Works (AI + grounding verification) |
 | Chat assistant | Unavailable, and says so | Grounded tool-calling assistant over your stored data |
-| Gmail sync | Unavailable — *Connect Gmail* explains what is missing | Read-only OAuth sync with incremental history and re-analysis |
+| Gmail | Unavailable — *Connect Gmail* explains what is missing | Incremental sync, cached AI summaries, and user-initiated compose/reply/reply-all/forward |
 | Notifications, search, filters, sorting, audit trail, analytics | Fully functional on local data | Fully functional on Supabase |
 
 **Not built here (and deliberately out of scope):** VozCore, VozProject, VozGoal and VozDay. The domain
 layer defines forward-compatible types for them, but no routes, pages or logic exist yet. Outlook is
 architected for (provider-agnostic accounts and messages) but not implemented. There is no WhatsApp
-integration. Attachments are read as **metadata only** — contents are never downloaded, opened or
-executed.
+integration. Attachment bytes are fetched from Gmail only after an authenticated user requests a
+preview or download; unsafe and unsupported content is served as a download, not rendered.
 
-**The product never, at any point, sends, deletes, labels, archives or forwards email.** The Gmail
-client requests `gmail.readonly` and there is no code path that mutates a mailbox.
+Gmail is never modified without an explicit user action. The OAuth grant includes `gmail.modify` for
+read/unread synchronization and `gmail.send` for messages the user reviews and sends in the composer.
+Forwarding currently includes the original message text, not its attachments. An ambiguous network
+failure is not retried automatically; check Gmail's Sent folder before attempting another send.
+AI-generated summaries are cached against the email/thread content hash and can be regenerated manually.
 
 ---
 
@@ -98,7 +101,7 @@ Data lives in `.vozinbox-dev/data.json` (git-ignored). Delete the folder to rese
    npm run db:migrate -- --dry-run   # list migrations + checksums without applying
    ```
 
-   No `psql`/`pg` available? Paste the files in `supabase/migrations/0001…0007` into the Supabase SQL
+   No `psql`/`pg` available? Paste the files in `supabase/migrations/0001…0009` into the Supabase SQL
    editor **in filename order**. They create extensions, enums, tables, indexes, row-level security,
    functions, triggers, realtime publications and the query RPCs.
 
@@ -108,12 +111,14 @@ Data lives in `.vozinbox-dev/data.json` (git-ignored). Delete the folder to rese
 Row-level security is enforced on every table; the policies are in `0004_rls.sql`. The service-role key
 is only used by server-side background jobs, and every query it makes is still scoped by `user_id`.
 
-### 4.2 Gmail (read-only)
+### 4.2 Gmail
 
 1. <https://console.cloud.google.com> → create/select a project.
 2. **APIs & Services → Library** → enable **Gmail API**.
-3. **OAuth consent screen** → External → add the scope
-   `https://www.googleapis.com/auth/gmail.readonly`. While the app is in *Testing*, add your Google
+3. **OAuth consent screen** → External → add the scopes
+   `https://www.googleapis.com/auth/gmail.modify` and `https://www.googleapis.com/auth/gmail.send`.
+   The first permits explicit read/unread synchronization; the second permits user-initiated sending.
+   While the app is in *Testing*, add your Google
    account under **Test users** (this matters: Gmail scopes require verification for public use).
 4. **Credentials → Create credentials → OAuth client ID → Web application**.
    Authorized redirect URI:
@@ -131,7 +136,9 @@ is only used by server-side background jobs, and every query it makes is still s
    `TOKEN_ENCRYPTION_KEY` is required: OAuth refresh/access tokens are encrypted with AES-256-GCM before
    they touch the database. Without it, *Connect Gmail* stays disabled and explains why.
 
-6. Restart, go to **Integrations → Connect Gmail**, approve read-only access, then **Sync now**.
+6. Restart, go to **Integrations → Connect Gmail**, approve the requested Gmail permissions, then **Sync now**.
+   Existing connections must be reauthorized before they can send. Google may require publishing and
+   verification of the OAuth consent screen before granting these Gmail scopes to public users.
    The first sync pulls the last 14 days of non-chat mail (capped by `AGENT_MAX_EMAILS_PER_SYNC`);
    subsequent syncs use Gmail's incremental history API and fall back to a date-bounded query when the
    history cursor has expired.
@@ -168,7 +175,7 @@ account. Point any scheduler at it:
 ## 5. How the intelligence works
 
 ```
-Gmail (read-only) ─▶ sync ─▶ stored message ─▶ agent pipeline ─▶ analysis + actions + thread state
+Gmail ─▶ sync ─▶ stored message ─▶ agent pipeline ─▶ analysis + actions + thread state
                                                    │
                                                    ├─▶ suggested task (human approves)
                                                    ├─▶ typed notification
@@ -245,8 +252,8 @@ src/
     services/          agent orchestration, dashboard aggregation
     store/             Store contract + Supabase and local implementations
     supabase/          browser/server/admin clients + middleware session refresh
-supabase/migrations/   0001…0007 schema, RLS, functions, RPCs
-tests/                 114+ unit and store tests over the deterministic core
+supabase/migrations/   0001…0009 schema, RLS, functions, RPCs, and AI summary cache
+tests/                 Unit and store tests over the deterministic core
 scripts/               apply-migrations.mjs
 ```
 

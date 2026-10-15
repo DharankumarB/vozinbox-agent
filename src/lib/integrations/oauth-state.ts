@@ -30,14 +30,20 @@ function secret(): string {
 interface StatePayload {
   userId: string;
   provider: string;
+  accountId?: string;
   nonce: string;
   exp: number;
 }
 
-export async function issueOAuthState(userId: string, provider: string): Promise<string> {
+export async function issueOAuthState(
+  userId: string,
+  provider: string,
+  options: { accountId?: string } = {},
+): Promise<string> {
   const payload: StatePayload = {
     userId,
     provider,
+    ...(options.accountId ? { accountId: options.accountId } : {}),
     nonce: randomBytes(16).toString('base64url'),
     exp: Math.floor(Date.now() / 1000) + TTL_SECONDS,
   };
@@ -57,7 +63,10 @@ export async function issueOAuthState(userId: string, provider: string): Promise
   return state;
 }
 
-export async function verifyOAuthState(state: string | null, expectedProvider: string): Promise<string> {
+export async function verifyOAuthState(
+  state: string | null,
+  expectedProvider: string,
+): Promise<{ userId: string; accountId?: string }> {
   const store = await cookies();
   const cookieState = store.get(COOKIE_NAME)?.value ?? null;
   store.set(COOKIE_NAME, '', { httpOnly: true, path: '/', maxAge: 0 });
@@ -112,5 +121,8 @@ export async function verifyOAuthState(state: string | null, expectedProvider: s
     });
   }
 
-  return payload.userId;
+  return {
+    userId: payload.userId,
+    ...(payload.accountId ? { accountId: payload.accountId } : {}),
+  };
 }

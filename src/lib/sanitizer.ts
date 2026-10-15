@@ -5,16 +5,16 @@
 export function sanitizeHtml(html: string): string {
   if (!html) return '';
   return html
-    // Remove script tags and content
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    // Remove style tags and content
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    // Remove iframe, embed, object, form tags and content
-    .replace(/<(iframe|embed|object|form)[\s\S]*?<\/\1>/gi, '')
-    .replace(/<(iframe|embed|object|form)[^>]*\/?>/gi, '')
-    // Remove inline event handlers like onclick, onload, onerror
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(script|style|iframe|embed|object|form|svg|math|template|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/<(script|style|iframe|embed|object|form|svg|math|template|noscript)\b[^>]*\/?>/gi, '')
+    .replace(/<\/?(base|meta|link|applet|frame|frameset)\b[^>]*>/gi, '')
     .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    // Neutralize javascript: and data: URIs in href / src
-    .replace(/(href|src)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]+)/gi, '$1="#"')
+    .replace(/\s+(srcdoc|srcset|ping|formaction|xlink:href)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(
+      /\s+(href|src)\s*=\s*(["'])\s*(?:javascript|vbscript|file):[\s\S]*?\2/gi,
+      ' $1="#"',
+    )
+    .replace(/\s+(href|src)\s*=\s*(["'])\s*data:(?!image\/(?:png|jpe?g|gif|webp);base64,)[\s\S]*?\2/gi, ' $1="#"')
     .trim();
 }

@@ -22,17 +22,30 @@ export async function GET(request: Request): Promise<NextResponse> {
       return NextResponse.redirect(new URL('/login?next=/integrations', new URL(request.url).origin));
     }
     enforceRateLimit('oauthStart', clientIdentifier(request.headers, auth.id));
+    const store = await getStore();
+    const accountId = new URL(request.url).searchParams.get('accountId') ?? undefined;
+    const targetAccount = accountId ? await store.getAccount(auth.id, accountId) : null;
+    if (
+      accountId &&
+      (!targetAccount || targetAccount.provider !== 'gmail')
+    ) {
+      throw new AppError('NOT_FOUND', { message: 'Gmail account to reconnect was not found' });
+    }
 
     if (isGmailConfigured() && isEncryptionConfigured()) {
-      const state = await issueOAuthState(auth.id, 'gmail');
-      const url = buildGoogleAuthUrl(state, { loginHint: auth.email ?? undefined });
-      logger.info('integration.gmail_oauth_started', { userId: auth.id });
+      const state = await issueOAuthState(auth.id, 'gmail', { accountId: targetAccount?.id });
+      const url = buildGoogleAuthUrl(state, {
+        loginHint: targetAccount?.email_address ?? auth.email ?? undefined,
+      });
+      logger.info('integration.gmail_oauth_started', {
+        userId: auth.id,
+        accountId: targetAccount?.id,
+      });
       return NextResponse.redirect(url);
     }
 
     if (isLocalModeEnabled()) {
       const targetEmail = 'demo@example.test';
-      const store = await getStore();
 
       const account = await store.createAccount({
         user_id: auth.id,
@@ -40,7 +53,10 @@ export async function GET(request: Request): Promise<NextResponse> {
         provider_account_id: targetEmail.toLowerCase(),
         email_address: targetEmail,
         display_name: auth.fullName ?? 'Demo User',
-        scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+        scopes: [
+          'https://www.googleapis.com/auth/gmail.modify',
+          'https://www.googleapis.com/auth/gmail.send',
+        ],
         status: 'CONNECTED',
       });
 
@@ -50,7 +66,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           user_id: auth.id,
           refresh_token_cipher: encryptSecret('mock_refresh_token'),
           access_token_cipher: encryptSecret('mock_access_token'),
-          scope: 'https://www.googleapis.com/auth/gmail.readonly',
+          scope: 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send',
           expires_at: new Date(Date.now() + 3600 * 1000 * 24 * 365).toISOString(),
           token_type: 'Bearer',
         });

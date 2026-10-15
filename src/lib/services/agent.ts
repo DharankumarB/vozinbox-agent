@@ -82,6 +82,7 @@ export async function syncAccount(input: {
 
     // ── 1. Which message ids are new? ────────────────────────────────────────
     let messageIds: string[] = [];
+    let changedMessageIds: string[] = [];
     let nextHistoryId: string | null = account.last_history_id;
     let usedFallback = false;
 
@@ -89,8 +90,10 @@ export async function syncAccount(input: {
       const history = await listHistory(accessToken, account.last_history_id, limit);
       if (history.expired) {
         usedFallback = true;
+        nextHistoryId = null;
       } else {
         messageIds = history.newMessageIds;
+        changedMessageIds = history.changedMessageIds;
         nextHistoryId = history.historyId ?? account.last_history_id;
       }
     } else {
@@ -109,7 +112,7 @@ export async function syncAccount(input: {
       messageIds = listed.messages.map((message) => message.id);
     }
 
-    messageIds = messageIds.slice(0, limit);
+    messageIds = [...new Set([...messageIds, ...changedMessageIds])].slice(0, limit);
     summary.fetched = messageIds.length;
 
     // ── 2. Fetch, normalise and store ────────────────────────────────────────
@@ -239,8 +242,8 @@ export async function syncAccount(input: {
 
     summary.message =
       summary.fetched === 0
-        ? 'No new messages.'
-        : `${summary.fetched} new message(s), ${summary.analyzed} analysed.`;
+        ? 'No new or changed messages.'
+        : `${summary.fetched} message(s) synchronized, ${summary.analyzed} analysed.`;
 
     await store.logAgentAction({
       user_id: userId,

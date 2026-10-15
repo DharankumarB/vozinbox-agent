@@ -12,12 +12,17 @@ export function ConnectGmailButton({
   configured = true,
   label = 'Connect Gmail',
   className,
+  accountId,
 }: {
   configured?: boolean;
   label?: string;
   className?: string;
+  accountId?: string;
 }) {
   const toast = useToast();
+  const connectHref = accountId
+    ? `/api/integrations/gmail/connect?accountId=${encodeURIComponent(accountId)}`
+    : '/api/integrations/gmail/connect';
 
   if (!configured) {
     return (
@@ -44,7 +49,7 @@ export function ConnectGmailButton({
   }
 
   return (
-    <a href="/api/integrations/gmail/connect" className={`btn btn-primary ${className ?? ''}`}>
+    <a href={connectHref} className={`btn btn-primary ${className ?? ''}`}>
       <Mail className="h-4 w-4" aria-hidden="true" />
       {label}
     </a>

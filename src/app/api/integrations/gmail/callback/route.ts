@@ -39,9 +39,14 @@ export async function GET(request: Request): Promise<NextResponse> {
   if (!code) return redirectWith('error', 'Google did not return an authorisation code.');
 
   try {
-    const userId = await verifyOAuthState(state, 'gmail');
+    const { userId, accountId } = await verifyOAuthState(state, 'gmail');
     const store = await getStore();
-    const { account } = await connectGmail({ store, userId, code });
+    const { account } = await connectGmail({
+      store,
+      userId,
+      code,
+      expectedAccountId: accountId,
+    });
 
     // Trigger initial inbox sync for the newly connected Gmail account (§32)
     try {

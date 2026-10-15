@@ -1,12 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Clock3, GitBranch, Info, Paperclip, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Clock3, GitBranch, Paperclip, ShieldAlert } from 'lucide-react';
 import { requireAuthContext } from '@/lib/auth';
 import { getStore } from '@/lib/store';
 import { AIInsightPanel } from '@/components/inbox/AIInsightPanel';
 import { SuggestedTaskCard } from '@/components/inbox/SuggestedTaskCard';
 import { EmailActionsBar } from '@/components/inbox/EmailActionsBar';
+import { EmailAttachments } from '@/components/inbox/EmailAttachments';
+import { EmailBody } from '@/components/inbox/EmailBody';
+import { EmailReplyActions } from '@/components/inbox/EmailReplyActions';
 import { ActivityFeed } from '@/components/agent/ActivityFeed';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { CategoryBadge, DeadlineBadge, PriorityBadge, ReviewBadge } from '@/components/ui/Badge';
@@ -65,7 +68,12 @@ export default async function EmailDetailPage({ params }: { params: Promise<{ id
 
       <PageHeader
         title={email.subject ?? '(no subject)'}
-        action={<EmailActionsBar emailId={email.id} isRead={email.is_read} />}
+        action={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <EmailReplyActions emailId={email.id} />
+            <EmailActionsBar emailId={email.id} isRead={email.is_read} />
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -115,36 +123,10 @@ export default async function EmailDetailPage({ params }: { params: Promise<{ id
 
             <div className="divider my-4" />
 
-            {body ? (
-              <div className="whitespace-pre-wrap break-anywhere text-sm leading-relaxed text-mist-200">
-                {body}
-              </div>
-            ) : (
-              <p className="text-sm text-mist-400">
-                This message has no readable plain-text body. Rich HTML content is not rendered for
-                safety — the AI analysis above is based on the extracted text and snippet.
-              </p>
-            )}
+            <EmailBody text={body || null} html={email.body_html} />
 
             {email.attachments.length > 0 ? (
-              <div className="mt-5 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
-                <p className="mb-2 text-[11px] uppercase tracking-wide text-mist-500">Attachments</p>
-                <ul className="space-y-1.5 text-xs">
-                  {email.attachments.map((attachment) => (
-                    <li key={attachment.filename} className="break-anywhere text-mist-300">
-                      📎 {attachment.filename}
-                      {attachment.mime_type ? <span className="text-mist-500"> · {attachment.mime_type}</span> : null}
-                      {attachment.size_bytes ? (
-                        <span className="text-mist-500"> · {Math.round(attachment.size_bytes / 1024)} KB</span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 flex items-start gap-1.5 text-[11px] text-mist-500">
-                  <Info className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
-                  Attachment contents are not opened or executed. Only metadata is read.
-                </p>
-              </div>
+              <EmailAttachments emailId={email.id} attachments={email.attachments} />
             ) : null}
           </article>
 
@@ -287,7 +269,7 @@ export default async function EmailDetailPage({ params }: { params: Promise<{ id
         </div>
 
         {/* ── AI panel (§39: becomes a stacked section on mobile) ───────────── */}
-        <AIInsightPanel analysis={analysis} />
+        <AIInsightPanel analysis={analysis} emailId={email.id} />
 
         <section className="panel p-5 lg:col-start-2" aria-label="Agent activity for this email">
           <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-mist-500">

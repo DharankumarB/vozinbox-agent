@@ -8,9 +8,8 @@ import { sanitizeHtml } from '@/lib/sanitizer';
 /**
  * Gmail integration (§25).
  *
- * Read-only by design. The scope requested is `gmail.readonly`; this module
- * contains no code path that sends, deletes, modifies or labels messages.
- * Attachment bodies are never fetched — only metadata is read.
+ * Gmail access is limited to mailbox synchronization, explicit read-state
+ * updates, and messages that the user explicitly sends from the composer.
  *
  * Tokens live in `email_account_credentials` encrypted at rest (§24); nothing in
  * this module ever returns a token to a caller outside the server layer.
@@ -20,7 +19,8 @@ export const GMAIL_SCOPES = [
   'openid',
   'email',
   'profile',
-  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/gmail.send',
 ] as const;
 
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -48,6 +48,167 @@ export interface GmailProfile {
 export interface GmailMessageSummary {
   id: string;
   threadId: string;
+}
+
+export interface GmailSendInput {
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  body: string;
+  threadId?: string;
+  inReplyTo?: string;
+  references?: string;
+}
+
+export interface GmailSendResult {
+  id: string;
+  threadId: string;
+}
+
+const EMAIL_ADDRESS_PATTERN = /^[^\s<>@,;:"()[\]\\]+@[^\s<>@,;:"()[\]\\]+\.[^\s<>@,;:"()[\]\\]+$/;
+
+function encodeMimeSubject(subject: string): string {
+  const words: string[] = [];
+  let chunk = '';
+  for (const character of subject) {
+    if (chunk && Buffer.byteLength(chunk + character, 'utf8') > 45) {
+      words.push(`=?UTF-8?B?${Buffer.from(chunk, 'utf8').toString('base64')}?=`);
+      chunk = '';
+    }
+    chunk += character;
+  }
+  if (chunk || words.length === 0) {
+    words.push(`=?UTF-8?B?${Buffer.from(chunk, 'utf8').toString('base64')}?=`);
+  }
+  return words.join('\r\n ');
+}
+
+function foldHeader(name: string, value: string): string {
+  const parts = value.split(/\s+/).filter(Boolean);
+  if (parts.some((part) => part.length > 998)) {
+    throw new AppError('VALIDATION', { message: `${name} contains an oversized header value` });
+  }
+  let line = `${name}:`;
+  const lines: string[] = [];
+  for (const part of parts) {
+    if (line.length + part.length + 1 > 78) {
+      lines.push(line);
+      line = ` ${part}`;
+    } else {
+      line += ` ${part}`;
+    }
+  }
+  lines.push(line);
+  return lines.join('\r\n');
+}
+
+function wrapBase64(value: string): string {
+  return value.match(/.{1,76}/g)?.join('\r\n') ?? '';
+}
+
+export function buildGmailRawMessage(input: GmailSendInput, from: string): string {
+  const safeHeader = (value: string, name: string) => {
+    if (/[\r\n]/.test(value)) {
+      throw new AppError('VALIDATION', { message: `${name} contains a line break` });
+    }
+    return value;
+  };
+  const addressHeader = (addresses: string[], name: string) =>
+    addresses.map((address) => {
+      const safe = safeHeader(address.trim(), name);
+      if (!EMAIL_ADDRESS_PATTERN.test(safe)) {
+        throw new AppError('VALIDATION', { message: `Invalid ${name} address` });
+      }
+      return safe;
+    });
+
+  const recipients = {
+    to: addressHeader(input.to, 'To'),
+    cc: addressHeader(input.cc, 'Cc'),
+    bcc: addressHeader(input.bcc, 'Bcc'),
+  };
+  if (recipients.to.length === 0) {
+    throw new AppError('VALIDATION', { message: 'At least one To recipient is required' });
+  }
+  if (!EMAIL_ADDRESS_PATTERN.test(safeHeader(from, 'From'))) {
+    throw new AppError('VALIDATION', { message: 'Invalid sender address' });
+  }
+  const subject = safeHeader(input.subject, 'Subject');
+  if (Buffer.byteLength(input.body, 'utf8') > 500_000) {
+    throw new AppError('VALIDATION', { message: 'Message body exceeds the maximum size' });
+  }
+
+  const headers = [
+    foldHeader('From', from),
+    foldHeader('To', recipients.to.join(', ')),
+    ...(recipients.cc.length ? [foldHeader('Cc', recipients.cc.join(', '))] : []),
+    ...(recipients.bcc.length ? [foldHeader('Bcc', recipients.bcc.join(', '))] : []),
+    `Subject: ${encodeMimeSubject(subject)}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+  ];
+  if (input.inReplyTo) headers.push(foldHeader('In-Reply-To', safeHeader(input.inReplyTo, 'In-Reply-To')));
+  if (input.references) headers.push(foldHeader('References', safeHeader(input.references, 'References')));
+  return [...headers, '', wrapBase64(Buffer.from(input.body, 'utf8').toString('base64'))].join('\r\n');
+}
+
+export async function sendGmailMessage(accessToken: string, input: GmailSendInput, from: string): Promise<GmailSendResult> {
+  if (accessToken.startsWith('mock_')) {
+    throw new AppError('NOT_CONFIGURED', {
+      message: 'A local demo credential cannot send a Gmail message',
+      userMessage: 'Connect a real Gmail account to send messages.',
+    });
+  }
+
+  const raw = buildGmailRawMessage(input, from);
+  let response: Response;
+  try {
+    response = await fetch(`${GMAIL_API}/messages/send`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        raw: Buffer.from(raw, 'utf8').toString('base64url'),
+        ...(input.threadId ? { threadId: input.threadId } : {}),
+      }),
+      cache: 'no-store',
+    });
+  } catch (error) {
+    throw new AppError('NETWORK', {
+      message: 'Gmail send request ended without a response; delivery status is unknown',
+      userMessage:
+        'Google did not confirm whether this message was sent. Check your Gmail Sent folder before trying again.',
+      retryable: false,
+      cause: error,
+    });
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as { id?: string; threadId?: string; error?: { message?: string } };
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new AppError('OAUTH_FAILED', {
+        message: `Gmail send rejected with ${response.status}: ${payload.error?.message ?? 'insufficient scope'}`,
+        userMessage: 'Reconnect Gmail and approve the send permission before trying again.',
+      });
+    }
+    throw new AppError('PROVIDER_ERROR', {
+      message: `Gmail send failed with ${response.status}: ${payload.error?.message ?? 'unknown error'}`,
+      userMessage: 'Gmail could not send this message. Please review it and try again.',
+    });
+  }
+  if (!payload.id || !payload.threadId) {
+    throw new AppError('PROVIDER_ERROR', {
+      message: 'Gmail accepted the send request but did not return message identifiers',
+      userMessage: 'Gmail may have sent the message. Check your Sent folder before trying again.',
+      retryable: false,
+    });
+  }
+  return { id: payload.id, threadId: payload.threadId };
 }
 
 export interface ParsedGmailMessage {
@@ -204,7 +365,11 @@ export async function revokeToken(token: string): Promise<boolean> {
 
 // ── API ──────────────────────────────────────────────────────────────────────
 
-async function gmailFetch<T>(accessToken: string, path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
+async function gmailFetch<T>(
+  accessToken: string,
+  path: string,
+  params: Record<string, string | number | string[] | undefined> = {},
+): Promise<T> {
   if (accessToken.startsWith('mock_')) {
     if (path === '/profile') {
       return { emailAddress: 'demo@example.test', messagesTotal: 0, historyId: '1000' } as unknown as T;
@@ -219,7 +384,11 @@ async function gmailFetch<T>(accessToken: string, path: string, params: Record<s
 
   const url = new URL(`${GMAIL_API}${path}`);
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) url.searchParams.set(key, String(value));
+    if (Array.isArray(value)) {
+      for (const item of value) url.searchParams.append(key, item);
+    } else if (value !== undefined) {
+      url.searchParams.set(key, String(value));
+    }
   }
 
   let response: Response;
@@ -315,7 +484,7 @@ export async function listMessageIds(
     q: options.query,
     pageToken: options.pageToken,
     maxResults: options.maxResults ?? 25,
-    labelIds: options.labelIds?.join(','),
+    labelIds: options.labelIds,
   });
 
   return {
@@ -330,6 +499,7 @@ export async function listMessageIds(
 export interface GmailHistoryResult {
   historyId: string | null;
   newMessageIds: string[];
+  changedMessageIds: string[];
   expired: boolean;
 }
 
@@ -342,36 +512,155 @@ export async function listHistory(
   try {
     const payload = await gmailFetch<{
       historyId?: string;
-      history?: Array<{ messagesAdded?: Array<{ message?: { id?: string } }> }>;
+      history?: Array<{
+        messagesAdded?: Array<{ message?: { id?: string } }>;
+        labelsAdded?: Array<{ message?: { id?: string } }>;
+        labelsRemoved?: Array<{ message?: { id?: string } }>;
+      }>;
     }>(accessToken, '/history', {
       startHistoryId,
-      historyTypes: 'messageAdded',
+      historyTypes: ['messageAdded', 'labelAdded', 'labelRemoved'],
       maxResults,
     });
 
     const ids = new Set<string>();
+    const changedIds = new Set<string>();
     for (const entry of payload.history ?? []) {
       for (const added of entry.messagesAdded ?? []) {
         if (added.message?.id) ids.add(added.message.id);
       }
+      for (const changed of [...(entry.labelsAdded ?? []), ...(entry.labelsRemoved ?? [])]) {
+        if (changed.message?.id) changedIds.add(changed.message.id);
+      }
     }
-    return { historyId: payload.historyId ?? null, newMessageIds: [...ids], expired: false };
+    return {
+      historyId: payload.historyId ?? null,
+      newMessageIds: [...ids],
+      changedMessageIds: [...changedIds],
+      expired: false,
+    };
   } catch (error) {
     const appError = toAppError(error, 'PROVIDER_ERROR');
     // Gmail returns 404 when the historyId is too old to be useful.
     if (appError.code === 'NOT_FOUND' || /404/.test(appError.message)) {
       logger.warn('gmail.history_expired', { startHistoryId });
-      return { historyId: null, newMessageIds: [], expired: true };
+      return { historyId: null, newMessageIds: [], changedMessageIds: [], expired: true };
     }
     throw appError;
   }
 }
 
 export async function getMessage(accessToken: string, messageId: string): Promise<ParsedGmailMessage> {
-  const payload = await gmailFetch<GmailApiMessage>(accessToken, `/messages/${encodeURIComponent(messageId)}`, {
+  const payload = await fetchMessagePayload(accessToken, messageId);
+  return parseGmailMessage(payload);
+}
+
+export interface GmailAttachmentData {
+  bytes: Buffer;
+  filename: string;
+  mimeType: string;
+}
+
+/** Retrieves one attachment from the authoritative MIME tree for this message. */
+export async function getMessageAttachment(
+  accessToken: string,
+  messageId: string,
+  attachmentIndex: number,
+): Promise<GmailAttachmentData> {
+  const message = await fetchMessagePayload(accessToken, messageId);
+  const parts = collectAttachmentParts(message.payload);
+  const part = parts[attachmentIndex];
+  if (!part?.filename || !part.body) {
+    throw new AppError('NOT_FOUND', {
+      message: 'The requested attachment is not present in this Gmail message',
+      userMessage: 'This attachment is no longer available. Sync the email and try again.',
+    });
+  }
+
+  let encodedData = part.body.data;
+  if (part.body.attachmentId) {
+    const attachment = await gmailFetch<{ data?: string; size?: number }>(
+      accessToken,
+      `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.body.attachmentId)}`,
+    );
+    encodedData = attachment.data;
+  }
+  if (!encodedData) {
+    throw new AppError('NOT_FOUND', {
+      message: 'Gmail returned an attachment part without content',
+      userMessage: 'Google could not retrieve this attachment. Please try again later.',
+    });
+  }
+
+  const bytes = decodeBase64UrlBytes(encodedData);
+  return {
+    bytes,
+    filename: part.filename.slice(0, 300),
+    mimeType: part.mimeType ?? 'application/octet-stream',
+  };
+}
+
+export async function modifyMessageReadState(
+  accessToken: string,
+  messageId: string,
+  isRead: boolean,
+): Promise<void> {
+  if (accessToken.startsWith('mock_')) {
+    throw new AppError('NOT_CONFIGURED', {
+      message: 'A local demo credential cannot modify a real Gmail message',
+      userMessage: 'Connect a real Gmail account to change its read status.',
+    });
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${GMAIL_API}/messages/${encodeURIComponent(messageId)}/modify`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(
+        isRead ? { removeLabelIds: ['UNREAD'] } : { addLabelIds: ['UNREAD'] },
+      ),
+      cache: 'no-store',
+    });
+  } catch (error) {
+    throw new AppError('NETWORK', {
+      message: 'Gmail message read-state update failed',
+      userMessage: 'Google could not update this message. Your inbox was not changed; please retry.',
+      cause: error,
+    });
+  }
+
+  if (response.ok) return;
+  const detail = await response.text().catch(() => '');
+  if (response.status === 401) {
+    throw new AppError('TOKEN_EXPIRED', {
+      message: `Gmail modify returned 401: ${detail.slice(0, 200)}`,
+      userMessage: 'Your Gmail connection needs to be refreshed. Please reconnect Gmail and retry.',
+    });
+  }
+  if (
+    response.status === 403 &&
+    /insufficient|scope|permission/i.test(detail)
+  ) {
+    throw new AppError('OAUTH_FAILED', {
+      message: `Gmail modify permission denied: ${detail.slice(0, 200)}`,
+      userMessage: 'Reconnect Gmail to grant permission to synchronize read status, then retry.',
+    });
+  }
+  throw new AppError('PROVIDER_ERROR', {
+    message: `Gmail modify failed (${response.status}): ${detail.slice(0, 300)}`,
+    userMessage: 'Google could not update this message. Your inbox was not changed; please retry.',
+  });
+}
+
+async function fetchMessagePayload(accessToken: string, messageId: string): Promise<GmailApiMessage> {
+  return gmailFetch<GmailApiMessage>(accessToken, `/messages/${encodeURIComponent(messageId)}`, {
     format: 'full',
   });
-  return parseGmailMessage(payload);
 }
 
 export async function getMessageMetadata(accessToken: string, messageId: string): Promise<{ internalDate: number | null; labelIds: string[] }> {
@@ -453,30 +742,44 @@ function collectHeaders(part: GmailPart | undefined): Record<string, string> {
     if (!header.name || header.value === undefined) continue;
     const key = header.name.toLowerCase();
     // Keep only headers the product needs — avoid storing arbitrary content.
-    if (['from', 'to', 'cc', 'subject', 'date', 'message-id', 'reply-to', 'list-unsubscribe'].includes(key)) {
+    if (['from', 'to', 'cc', 'subject', 'date', 'message-id', 'in-reply-to', 'references', 'reply-to', 'list-unsubscribe'].includes(key)) {
       output[key] = header.value.slice(0, 2000);
     }
   }
   return output;
 }
 
-function collectAttachments(part: GmailPart | undefined): ParsedGmailMessage['attachments'] {
-  const attachments: ParsedGmailMessage['attachments'] = [];
+interface GmailAttachmentPart {
+  filename: string;
+  mimeType: string | null;
+  body: NonNullable<GmailPart['body']>;
+}
+
+function collectAttachmentParts(part: GmailPart | undefined): GmailAttachmentPart[] {
+  const attachments: GmailAttachmentPart[] = [];
   const walk = (node: GmailPart | undefined): void => {
     if (!node) return;
     const isAttachment = Boolean(node.filename && node.filename.length > 0 && node.body);
     if (isAttachment) {
       attachments.push({
         filename: String(node.filename).slice(0, 300),
-        mime_type: node.mimeType ?? null,
-        size_bytes: node.body?.size ?? null,
-        attachment_id: node.body?.attachmentId ?? null,
+        mimeType: node.mimeType ?? null,
+        body: node.body!,
       });
     }
     for (const child of node.parts ?? []) walk(child);
   };
   walk(part);
   return attachments.slice(0, 25);
+}
+
+function collectAttachments(part: GmailPart | undefined): ParsedGmailMessage['attachments'] {
+  return collectAttachmentParts(part).map((attachment) => ({
+    filename: attachment.filename,
+    mime_type: attachment.mimeType,
+    size_bytes: attachment.body.size ?? null,
+    attachment_id: attachment.body.attachmentId ?? null,
+  }));
 }
 
 function collectBodies(part: GmailPart | undefined): { text: string; html: string } {
@@ -488,8 +791,8 @@ function collectBodies(part: GmailPart | undefined): { text: string; html: strin
     const mime = (node.mimeType ?? '').toLowerCase();
     const data = node.body?.data;
 
-    if (data && node.filename === undefined) {
-      const decoded = decodeBase64Url(data);
+    if (data && !node.filename) {
+      const decoded = decodeMimePart(data, node.headers);
       if (mime === 'text/plain' && text.length < MAX_BODY_CHARS) text += decoded;
       else if (mime === 'text/html' && html.length < MAX_BODY_CHARS) html += decoded;
     }
@@ -500,13 +803,31 @@ function collectBodies(part: GmailPart | undefined): { text: string; html: strin
   return { text, html };
 }
 
+function decodeMimePart(data: string, headers: GmailPart['headers']): string {
+  const contentType = headers?.find((header) => header.name?.toLowerCase() === 'content-type')?.value ?? '';
+  const charset = /charset\s*=\s*["']?([^;"'\s]+)/i.exec(contentType)?.[1];
+  const bytes = decodeBase64UrlBytes(data);
+  if (charset) {
+    try {
+      return new TextDecoder(charset, { fatal: false }).decode(bytes);
+    } catch {
+      // Unknown or malformed charset labels fall back to UTF-8 for readable text.
+    }
+  }
+  return bytes.toString('utf8');
+}
+
 export function decodeBase64Url(data: string): string {
   try {
-    const normalised = data.replace(/-/g, '+').replace(/_/g, '/');
-    return Buffer.from(normalised, 'base64').toString('utf8');
+    return decodeBase64UrlBytes(data).toString('utf8');
   } catch {
     return '';
   }
+}
+
+export function decodeBase64UrlBytes(data: string): Buffer {
+  const normalised = data.replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(normalised, 'base64');
 }
 
 /** Minimal, dependency-free HTML → text conversion for search and analysis. */

@@ -3,6 +3,8 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  devIndicators: false,
+  distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
   serverExternalPackages: ['@supabase/supabase-js'],
   experimental: {
     // Server Actions handle user-scoped mutations; keep them bounded.

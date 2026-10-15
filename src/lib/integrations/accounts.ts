@@ -41,8 +41,9 @@ export async function connectGmail(input: {
   store: Store;
   userId: string;
   code: string;
+  expectedAccountId?: string;
 }): Promise<ConnectResult> {
-  const { store, userId, code } = input;
+  const { store, userId, code, expectedAccountId } = input;
   if (!isGmailReady()) {
     throw new AppError('NOT_CONFIGURED', {
       message: 'Gmail connection is not configured',
@@ -52,14 +53,6 @@ export async function connectGmail(input: {
   }
 
   const tokens = await exchangeCodeForTokens(code);
-  if (!tokens.refresh_token) {
-    throw new AppError('OAUTH_FAILED', {
-      message: 'Google did not return a refresh token',
-      userMessage:
-        'Google did not grant long-lived access. Please try connecting again and approve all requested permissions.',
-    });
-  }
-
   const accessToken = tokens.access_token;
   if (!accessToken) {
     throw new AppError('OAUTH_FAILED', { message: 'Google did not return an access token' });
@@ -68,6 +61,38 @@ export async function connectGmail(input: {
   const profile = await getGmailProfile(accessToken);
   const identity = await getGoogleUserInfo(accessToken);
   const providerAccountId = identity.sub ?? profile.providerAccountId;
+  const existingAccount = await store.getAccountByProvider(userId, 'gmail', providerAccountId);
+  if (expectedAccountId) {
+    const expectedAccount = await store.getAccount(userId, expectedAccountId);
+    if (
+      !expectedAccount ||
+      expectedAccount.provider !== 'gmail' ||
+      expectedAccount.provider_account_id !== providerAccountId
+    ) {
+      throw new AppError('OAUTH_FAILED', {
+        message: 'The Google account does not match the mailbox being reconnected',
+        userMessage: 'Choose the same Google account you are reconnecting, then try again.',
+      });
+    }
+  }
+
+  const existingCredentials = existingAccount
+    ? await store.getCredentials(userId, existingAccount.id)
+    : null;
+  const refreshTokenCipher = tokens.refresh_token
+    ? encryptSecret(tokens.refresh_token)
+    : existingCredentials?.refresh_token_cipher;
+  if (!refreshTokenCipher) {
+    throw new AppError('OAUTH_FAILED', {
+      message: 'Google did not return a refresh token and no existing token can be reused',
+      userMessage:
+        'Google did not grant long-lived access. Please try connecting again and approve all requested permissions.',
+    });
+  }
+
+  const scopes = tokens.scope
+    ? tokens.scope.split(' ').filter(Boolean)
+    : existingAccount?.scopes ?? [...GMAIL_SCOPES];
 
   const account = await store.createAccount({
     user_id: userId,
@@ -75,14 +100,14 @@ export async function connectGmail(input: {
     provider_account_id: providerAccountId,
     email_address: profile.emailAddress,
     display_name: identity.name,
-    scopes: tokens.scope ? tokens.scope.split(' ').filter(Boolean) : [...GMAIL_SCOPES],
+    scopes,
     status: 'CONNECTED',
   });
 
   await store.saveCredentials({
     account_id: account.id,
     user_id: userId,
-    refresh_token_cipher: encryptSecret(tokens.refresh_token),
+    refresh_token_cipher: refreshTokenCipher,
     access_token_cipher: tokens.access_token ? encryptSecret(tokens.access_token) : null,
     scope: tokens.scope,
     expires_at: tokens.expires_at,
@@ -114,7 +139,7 @@ export async function connectGmail(input: {
 
   logger.info('integration.gmail_connected', { userId, accountId: account.id });
 
-  return { account, created: true };
+  return { account, created: !existingAccount };
 }
 
 /**
